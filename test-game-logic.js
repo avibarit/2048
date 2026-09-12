@@ -361,6 +361,26 @@ assert.deepStrictEqual(perfRes2.moves, [
 ]);
 console.log('✓ performMove passes through moves metadata');
 
+// 23. Regression: screenshot board — the two 128s must merge vertically.
+// Column is [128, 128, 256, 2], so Up/Down must merge 128+128 (+256).
+const screenshotBoard = makeBoard([
+  [2, 128, 2, 32],
+  [16, 128, 32, 16],
+  [4, 256, 16, 2],
+  [2, 2, 0, 4],
+]);
+let upRes = GameLogic.performMove(screenshotBoard, 'up', () => 0);
+assert.strictEqual(upRes.moved, true);
+assert.strictEqual(upRes.scoreDelta, 256);
+assert.deepStrictEqual(
+  upRes.board.map((row) => row[1]).slice(0, 3),
+  [256, 256, 2]
+);
+let downRes = GameLogic.performMove(screenshotBoard, 'down', () => 0);
+assert.strictEqual(downRes.moved, true);
+assert.strictEqual(downRes.scoreDelta, 256);
+console.log('✓ screenshot board: adjacent 128s merge on up/down (+256)');
+
 console.log('\n=== ALL TESTS PASSED ===');
 console.log(
   'Core logic verified: slide, merge-once, score, spawn, win/lose, no-add-on-invalid, merge coords.'

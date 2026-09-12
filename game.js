@@ -384,6 +384,7 @@ const UI = (() => {
     won: false, // currently showing win overlay
     continuedAfterWin: false, // kept playing past 2048
     history: [], // undo stack: { board, score }
+    animGen: 0, // invalidates pending animation timeouts (see animateMove)
     tileSize: BASE_TILE,
     tileGap: BASE_GAP,
     tileIdCounter: 0,
@@ -619,18 +620,24 @@ const UI = (() => {
     return el;
   }
 
-  /** Rebuild every tile from state.board (no animation). */
-  function renderFull() {
+  /** Rebuild every tile from state.board. opts.merges replays the merge pulse. */
+  function renderFull(opts = {}) {
     if (!dom.tiles || !state.board) return;
     dom.tiles.innerHTML = '';
     state.tileList = [];
+
+    const mergeKeys = new Set(
+      (opts.merges || []).map(({ r, c }) => `${r}-${c}`)
+    );
 
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
         const value = state.board[r][c];
         if (value === 0) continue;
         const tile = createTileObj(value, r, c);
-        dom.tiles.appendChild(buildTileEl(tile));
+        dom.tiles.appendChild(
+          buildTileEl(tile, { merge: mergeKeys.has(`${r}-${c}`) })
+        );
         state.tileList.push(tile);
       }
     }
@@ -643,8 +650,15 @@ const UI = (() => {
    * Animate one move using per-tile movement metadata:
    * slide every source element to its destination, resolve merges
    * (swap the two sources for a pulsing merged tile), then pop the spawn.
+   *
+   * `gen` is the animation generation: if a newer move / undo / new game
+   * happened since, every deferred step below bails out so stale timeouts
+   * can never corrupt the live board. After the slide finishes, the DOM is
+   * reconciled with the authoritative state.board, so tiles can never
+   * desync (stuck tiles, phantom failed merges) no matter how fast moves
+   * are queued.
    */
-  function animateMove(result) {
+  function animateMove(result, gen) {
     if (!dom.tiles) return;
 
     const byPos = new Map();
@@ -693,6 +707,7 @@ const UI = (() => {
     // After the slide finishes, replace each merged pair with one new tile
     for (const m of mergeTargets) {
       setTimeout(() => {
+        if (gen !== state.animGen) return;
         if (!m.sources.every((t) => t.el && t.el.parentNode)) return;
         for (const t of m.sources) t.el.remove();
 
@@ -711,19 +726,25 @@ const UI = (() => {
       dom.tiles.appendChild(buildTileEl(tile, { pop: true }));
       state.tileList.push(tile);
       setTimeout(() => {
+        if (gen !== state.animGen) return;
         const inner = tile.el && tile.el.firstChild;
         if (inner) inner.classList.remove('tile-pop');
       }, 250);
     }
 
-    // Clear merge animation classes
-    if (mergeTargets.length) {
+    // Reconcile: rebuild the DOM from the authoritative board so any
+    // drift (rapid moves, interrupted merges) is corrected, keeping the
+    // merge pulse. This is what prevents stuck / unmergeable tiles.
+    setTimeout(() => {
+      if (gen !== state.animGen) return;
+      renderFull({ merges: result.merges });
       setTimeout(() => {
+        if (gen !== state.animGen || !dom.tiles) return;
         dom.tiles.querySelectorAll('.tile-merge').forEach((el) => {
           el.classList.remove('tile-merge');
         });
-      }, 350);
-    }
+      }, 250);
+    }, MOVE_MS + 60);
   }
 
   function updateScoreDisplay() {
@@ -844,7 +865,8 @@ const UI = (() => {
     applyScore(result.scoreDelta);
     showScorePopup(result.scoreDelta);
 
-    animateMove(result);
+    const gen = ++state.animGen;
+    animateMove(result, gen);
     saveState();
     updateScoreDisplay();
     updateUndoButton();
@@ -872,6 +894,7 @@ const UI = (() => {
     state.score = prev.score;
     state.over = false;
     state.won = false;
+    state.animGen++; // cancel any in-flight move animation
     // Only stay "past the win" if the restored board is still won
     state.continuedAfterWin =
       state.continuedAfterWin && GameLogic.isGameWon(state.board);
@@ -895,6 +918,7 @@ const UI = (() => {
     state.won = false;
     state.continuedAfterWin = false;
     state.history = [];
+    state.animGen++; // cancel any in-flight move animation
 
     hideOverlay();
     updateLayout();
