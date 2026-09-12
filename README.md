@@ -47,3 +47,32 @@ Tests cover:
 - Full keyboard, touch swipe, New Game, score + best
 
 No frameworks, no build step, zero runtime dependencies.
+
+## Native desktop app (Omarchy / Arch Linux)
+
+A native Tauri + WebKitGTK wrapper lives in `src-tauri/`. It reuses the same
+`index.html` / `styles.css` / `game.js` — no rewrite.
+
+Requirements (Omarchy/Arch):
+
+```bash
+sudo pacman -S rust cargo nodejs npm webkit2gtk-4.1 gtk3 libsoup3
+```
+
+Build + install to `~/.local` (no sudo):
+
+```bash
+npm install
+npm run build   # or: ./build-native.sh
+./install.sh
+```
+
+Then launch with `2048` or from your app launcher (wofi/rofi).
+The installer places:
+
+- `~/.local/bin/2048`
+- `~/.local/share/applications/2048.desktop`
+- `~/.local/share/icons/2048.png`
+
+Packaging: a `PKGBUILD` is included for `makepkg` / AUR-style installs
+(`makepkg -si`), which installs to `/usr/bin/2048`.

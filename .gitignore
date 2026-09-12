@@ -3,6 +3,7 @@ node_modules/
 dist/
 .next/
 target/
+src-tauri/gen/
 __pycache__/
 *.pyc
 .venv/
